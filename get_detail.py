@@ -6,7 +6,7 @@ import os.path
 filename = 'ids.csv'
 post_ids = []
 
-with open(filename, 'r') as file:
+with open(filename, 'r', encoding='utf-8') as file:
     reader = csv.reader(file)
     next(reader)  # 跳过表头
     for row in reader:
@@ -17,23 +17,27 @@ with open(filename, 'r') as file:
 base_url = "http://job.sinopec.com/api/upgrade/homepage/selectPositionDetail"
 
 headers = {
-    "accept": "application/json, text/plain, */*",
-    "accept-language": "zh-CN,zh;q=0.9",
-    "referrer": "http://job.sinopec.com/",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN,zh;q=0.9",
+    "DNT": "1",
+    "Proxy-Connection": "keep-alive",
+    "Referer": "http://job.sinopec.com/",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 }
 
 filename = "job_details.csv"
 file_exists = os.path.isfile(filename)
-existing_ids = set()  # 用于存储已存在的职位ID
+existing_ids = set()
 
 if file_exists:
-    with open(filename, 'r') as file:
+    with open(filename, 'r', encoding='utf-8-sig') as file:
         reader = csv.reader(file)
         next(reader)  # 跳过表头
         for row in reader:
-            existing_ids.add(row[0])  # 将已存在的职位ID添加到集合中
+            if row:  # 确保行不为空
+                existing_ids.add(row[0])
 
-with open(filename, "a", newline="") as file:
+with open(filename, "a", newline="", encoding='utf-8-sig') as file:
     writer = csv.writer(file)
     if not file_exists:  # 如果文件为空，写入表头
         writer.writerow(["id", "jobPosition", "number", "workAddr", "educationNorm",
@@ -45,13 +49,15 @@ with open(filename, "a", newline="") as file:
             continue
 
         url = f"{base_url}?postId={post_id}"
-        response = requests.get(url, headers=headers).json()
-
-        # 处理响应数据
-        print(post_id + ":")
         try:
-            data = response.get("data")
-            message = response.get("message")
+            response = requests.get(url, headers=headers, verify=False)  # 添加 verify=False
+            response_json = response.json()
+
+            # 处理响应数据
+            print(post_id + ":")
+            data = response_json.get("data")
+            message = response_json.get("message")
+
             if message == "请求成功" and data:
                 # 提取字段数据
                 id_value = data.get("id")
@@ -70,5 +76,5 @@ with open(filename, "a", newline="") as file:
                 print(f"职位ID {post_id} 的数据已保存到文件: {filename}")
             else:
                 print(f"请求失败或无数据，职位ID {post_id}")
-        except:
-            print(f"请求失败或无数据，职位ID {post_id}")
+        except Exception as e:
+            print(f"请求失败或无数据，职位ID {post_id}，错误信息：{str(e)}")
