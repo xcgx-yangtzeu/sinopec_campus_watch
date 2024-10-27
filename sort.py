@@ -5,7 +5,8 @@ output_filename = "sorted_id.csv"
 
 selected_ids = []
 
-with open(input_filename, 'r') as input_file:
+# 修改这里，添加 encoding='utf-8-sig'
+with open(input_filename, 'r', encoding='utf-8-sig') as input_file:
     reader = csv.reader(input_file)
     header = next(reader)  # 读取表头
 
@@ -24,7 +25,8 @@ with open(input_filename, 'r') as input_file:
             selected_ids.append(id_value)
 
 if len(selected_ids) > 0:
-    with open(output_filename, 'w', newline='') as output_file:
+    # 这里也使用 utf-8-sig 编码
+    with open(output_filename, 'w', newline='', encoding='utf-8-sig') as output_file:
         writer = csv.writer(output_file)
         writer.writerow(["id"])
 
