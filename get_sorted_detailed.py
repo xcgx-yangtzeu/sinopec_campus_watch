@@ -4,92 +4,92 @@ import os.path
 from datetime import datetime
 import pandas as pd
 
-# 读取CSV文件
-filename = 'sorted_id.csv'
-post_ids = []
+def read_post_ids(filename):
+    post_ids = []
+    try:
+        with open(filename, 'r', encoding='utf-8') as file:
+            reader = csv.reader(file)
+            next(reader)  # 跳过表头
+            for row in reader:
+                post_ids.append(row[0])
+    except Exception as e:
+        print(f"读取文件出错: {e}")
+    return post_ids
 
-with open(filename, 'r') as file:
-    reader = csv.reader(file)
-    header = ['id', 'job_position', 'number', 'work_addr', 'education_norm', 'specialty_norm', 'post_num', 'dept_name',
-              'timestamp']
-    next(reader)  # 跳过表头
-    for row in reader:
-        post_id = row[0]
-        post_ids.append(post_id)
+def get_job_details(post_id, headers):
+    url = f"http://job.sinopec.com/api/upgrade/homepage/selectPositionDetail?postId={post_id}"
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        return response.json()
+    except Exception as e:
+        print(f"请求失败: {e}")
+        return None
 
-# 发送请求并获取数据
-base_url = "http://job.sinopec.com/api/upgrade/homepage/selectPositionDetail"
+def main():
+    # 配置
+    input_filename = 'sorted_id.csv'
+    output_filename = 'result.csv'
+    headers = {
+        "accept": "application/json, text/plain, */*",
+        "accept-language": "zh-CN,zh;q=0.9",
+        "referrer": "http://job.sinopec.com/",
+    }
+    header = ['id', 'job_position', 'number', 'work_addr', 'education_norm',
+              'specialty_norm', 'post_num', 'dept_name', 'timestamp']
 
-headers = {
-    "accept": "application/json, text/plain, */*",
-    "accept-language": "zh-CN,zh;q=0.9",
-    "referrer": "http://job.sinopec.com/",
-}
+    # 读取职位ID
+    post_ids = read_post_ids(input_filename)
+    if not post_ids:
+        print("没有找到职位ID")
+        return
 
-filename = "result.csv"
-file_exists = os.path.isfile(filename)
-existing_jobs = []  # 存储已存在的职位数据
-
-if file_exists:
-    with open(filename, 'r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            existing_jobs.append(row)  # 将已存在的职位数据添加到列表中
-
-with open(filename, "a", newline="") as file:
-    writer = csv.writer(file)
-
-    if not file_exists:
-        writer.writerow(header)  # 写入表头
-
-    for post_id in post_ids:
-        url = f"{base_url}?postId={post_id}"
-        response = requests.get(url, headers=headers).json()
-
-        # 处理响应数据
+    # 读取现有数据
+    existing_jobs = {}
+    if os.path.isfile(output_filename):
         try:
-            data = response.get("data")
-            message = response.get("message")
-            if message == "请求成功" and data:
-                # 提取字段数据
-                id_value = data.get("id")
-                job_position = data.get("jobPosition")
-                number = data.get("number")
-                work_addr = data.get("workAddr")
-                education_norm = data.get("educationNorm")
-                specialty_norm = data.get("specialtyNorm")
-                post_num = data.get("postNum")
-                dept_name = data.get("deptName")
-                current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # 获取当前日期和时间
+            df = pd.read_csv(output_filename)
+            existing_jobs = df.set_index('id').to_dict('index')
+        except Exception as e:
+            print(f"读取现有数据出错: {e}")
 
-                # 刷新已存在的职位数据
-                updated = False
-                for i, job in enumerate(existing_jobs):
-                    if job[0] == id_value:  # 根据职位ID匹配
-                        existing_jobs[i] = [id_value, job_position, number, work_addr,
-                                            education_norm, specialty_norm, post_num, dept_name, current_datetime]
-                        updated = True
-                        print(f"职位ID {post_id} 的数据已刷新")
-                        break
+    # 获取和更新数据
+    updated_jobs = []
+    for post_id in post_ids:
+        response = get_job_details(post_id, headers)
+        if not response or response.get("message") != "请求成功":
+            print(f"获取职位ID {post_id} 的数据失败")
+            continue
 
-                # 如果不存在，则将新数据添加到列表中
-                if not updated:
-                    existing_jobs.append([id_value, job_position, number, work_addr,
-                                          education_norm, specialty_norm, post_num, dept_name, current_datetime])
-                    print(f"职位ID {post_id} 的数据已添加")
+        data = response.get("data")
+        if not data:
+            continue
 
-        except:
-            print(f"请求失败或无数据，职位ID {post_id}")
+        job_data = {
+            'id': data.get("id"),
+            'job_position': data.get("jobPosition"),
+            'number': data.get("number"),
+            'work_addr': data.get("workAddr"),
+            'education_norm': data.get("educationNorm"),
+            'specialty_norm': data.get("specialtyNorm"),
+            'post_num': data.get("postNum"),
+            'dept_name': data.get("deptName"),
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
 
-    # 将所有数据写入CSV文件
-    writer.writerows(existing_jobs)
+        updated_jobs.append(job_data)
+        print(f"职位ID {post_id} 的数据已{'更新' if post_id in existing_jobs else '添加'}")
 
-# 将结果文件排序
-df = pd.read_csv(filename)
-df['post_num'] = pd.to_numeric(df['post_num'])
-df['number'] = pd.to_numeric(df['number'])
-df['post_num_num_ratio'] = df['post_num'] / df['number']
-df_sorted = df.sort_values(by='post_num_num_ratio', ascending=True)
-df_sorted.to_csv(filename, index=False)
+    # 保存数据
+    try:
+        df = pd.DataFrame(updated_jobs)
+        df['post_num'] = pd.to_numeric(df['post_num'], errors='coerce')
+        df['number'] = pd.to_numeric(df['number'], errors='coerce')
+        df['post_num_num_ratio'] = df['post_num'] / df['number']
+        df_sorted = df.sort_values(by='post_num_num_ratio', ascending=True)
+        df_sorted.to_csv(output_filename, index=False)
+        print(f"已将排序后的结果保存到文件: {output_filename}")
+    except Exception as e:
+        print(f"保存数据时出错: {e}")
 
-print(f"已将排序后的结果保存到文件: {filename}")
+if __name__ == "__main__":
+    main()
